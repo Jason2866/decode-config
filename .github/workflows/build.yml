@@ -1,0 +1,131 @@
+name: Build Workflow
+
+on:
+  workflow_dispatch:  # Manually start a workflow
+
+  push:
+    branches:
+    - main
+    paths-ignore:
+    - '.github/**' # Ignore changes towards the .github directory
+
+jobs:
+  build-windows:
+    runs-on: windows-2019
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.9'
+          architecture: 'x64'
+      - name: Install pyinstaller
+        run: |
+          pip install pyinstaller
+      - name: Run PyInstaller
+        run: |
+          cd build
+          pyinstaller.exe dc-build-win64.spec
+      - uses: actions/upload-artifact@v2
+        with:
+          name: decode-config
+          path: build/dist/decode-config_win64.exe
+
+  build-windows-x86:
+    runs-on: windows-2019
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.9'
+          architecture: 'x86'
+      - name: Install pyinstaller
+        run: pip install pyinstaller
+      - name: Run PyInstaller
+        run: |
+          cd build
+          pyinstaller.exe dc-build-win32.spec
+      - uses: actions/upload-artifact@v2
+        with:
+          name: decode-config
+          path: build/dist/decode-config_win32.exe
+
+  build-ubuntu:
+    runs-on: ubuntu-20.04
+    steps:
+     - name: Checkout
+       uses: actions/checkout@v2
+     - name: Install Python
+       uses: actions/setup-python@v1
+       with:
+         python-version: '3.9'
+     - name: Install pyinstaller
+       run: pip install pyinstaller
+     - name: Run PyInstaller
+       run: |
+          cd build
+          pyinstaller dc-build-linux.spec
+     - name: See dist directory
+       run: ls build/dist
+     - name: 'Tar files'
+       run: gzip build/dist/decode-config
+     - name: 'show gzip'
+       run: ls build/dist
+     - uses: actions/upload-artifact@v2
+       with:
+         name: decode-config
+         path: build/dist/decode-config.gz
+
+
+  build-macos:
+    runs-on: macOS-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Install Python
+        uses: actions/setup-python@v1
+        with:
+          python-version: '3.9'
+      - name: Install pyinstaller
+        run: pip install pyinstaller
+      - name: Run PyInstaller
+        run: |
+          cd build
+          pyinstaller dc-build-mac.spec
+      - name: See dist directory
+        run: ls build/dist
+      - name: Move app
+        run: |
+          mv build/dist/decode-config build/dist/decode-config-macOS.app
+      - name: 'Tar files'
+        run: tar -cvf build/dist/mac.tar build/dist/*
+      - name: 'Upload Artifact'
+        uses: actions/upload-artifact@v2
+        with:
+          name: decode-config
+          path: build/dist/mac.tar
+
+  release:
+    needs: [build-windows, build-windows-x86, build-ubuntu, build-macos]
+    runs-on: ubuntu-20.04
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v2
+      - name: Download new decode-config binaries
+        uses: actions/download-artifact@v2
+        with:
+         name: decode-config
+         path: ./decode-config
+      - name: Display files to release
+        run: ls ./decode-config/*
+      - name: Release
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: ${{ github.run_number }}
+          prerelease: false
+          files: ./decode-config/*
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
